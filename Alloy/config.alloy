@@ -1,0 +1,311 @@
+livedebugging {
+	enabled = true
+}
+
+// ###############################
+// #### Metrics Configuration ####
+// ###############################
+
+prometheus.scrape "metrics" {
+	// https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.scrape/
+
+	targets = [
+		{
+			__address__ = "prometheus:9090",
+			job         = "prometheus",
+		},
+		{
+			__address__ = "alertmanager:9093",
+			job         = "alertmanager",
+		},
+		{
+			__address__ = "node-exporter:9100",
+			job         = "node-exporter",
+		},
+		{
+			__address__ = "cadvisor:8080",
+			job         = "cadvisor",
+		},
+		{
+			__address__ = "smartctl-exporter:9633",
+			job         = "smartctl",
+		},
+		{
+			__address__ = "sonarr-exportarr:9707",
+			job         = "sonarr",
+		},
+		{
+			__address__ = "radarr-exportarr:9708",
+			job         = "radarr",
+		},
+		{
+			__address__ = "prowlarr-exportarr:9710",
+			job         = "prowlarr",
+		},
+		{
+			__address__ = "sabnzbd-exportarr:9711",
+			job         = "sabnzbd",
+		},
+		{
+			__address__ = "tdarr-exportarr:9712",
+			job         = "tdarr",
+		},
+		{
+			__address__ = "unpoller:9130",
+			job         = "unpoller",
+		},
+	]
+
+	scrape_timeout = "60s"
+
+	forward_to = [prometheus.relabel.metrics.receiver]
+}
+
+prometheus.relabel "metrics" {
+	// https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.relabel/
+
+	// rule {
+	// 	//Rename the "instance" label to "host" if the "environment" label is "production"
+	// 	source_labels = ["environment", "instance"]
+	// 	regex         = "production;(.*)"
+	// 	target_label  = "host"
+	// 	replacement   = "$1"
+	// 	action        = "replace"
+	// }
+
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.scrape "kuma" {
+	// https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.scrape/
+
+	targets = [
+		{
+			__address__ = "10.254.1.11:3001",
+			job         = "kuma",
+		},
+	]
+
+	scrape_timeout = "60s"
+
+	basic_auth {
+		username = "prom"
+		password = "<password>"
+	}
+	forward_to = [prometheus.relabel.kuma.receiver]
+}
+
+prometheus.relabel "kuma" {
+	// https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.relabel/
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// Configure a prometheus.remote_write component to send metrics to a Prometheus server.
+prometheus.remote_write "default" {
+	// https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.remote_write/
+
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
+
+// ###############################
+// #### Logging Configuration ####
+// ###############################
+
+// Discover Docker containers and extract metadata.
+discovery.docker "arios" {
+	// https://grafana.com/docs/alloy/latest/reference/components/discovery/discovery.docker/
+
+	host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "logs_integrations_docker" {
+	// https://grafana.com/docs/alloy/latest/reference/components/discovery/discovery.relabel/
+
+	targets = []
+
+	rule {
+		source_labels = ["__meta_docker_container_label_logging"]
+		regex         = "^(false|off|disable|no|0)$"
+		action        = "drop"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_log_stream"]
+		target_label  = "logstream"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "containerlogs"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		target_label  = "compose_project"
+	}
+}
+
+// Configure a loki.source.docker component to collect logs from Docker containers.
+loki.source.docker "docker" {
+	// https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.docker/
+
+	host          = "unix:///var/run/docker.sock"
+	targets       = discovery.docker.arios.targets
+	relabel_rules = discovery.relabel.logs_integrations_docker.rules
+	forward_to    = [loki.process.docker.receiver]
+}
+
+loki.process "docker" {
+	// https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/
+
+	forward_to = [loki.write.default.receiver]
+}
+
+local.file_match "plex_logs" {
+	// https://grafana.com/docs/alloy/latest/reference/components/local/local.file_match/
+
+	path_targets = [{
+		__address__      = "localhost",
+		__path__         = "/path/to/Plex/Data/Library/Application Support/Plex Media Server/Logs/**/*.log",
+		__path_exclude__ = "/path/to/Plex/Data/Library/Application Support/Plex Media Server/Logs/*.[0-9].log",
+		job              = "plex-logs",
+	}]
+}
+
+loki.source.file "plex_logs" {
+	// https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.file/
+
+	targets    = local.file_match.plex_logs.targets
+	forward_to = [loki.process.plex_logs.receiver]
+}
+
+loki.process "plex_logs" {
+	// https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/
+
+	forward_to = [loki.write.default.receiver]
+
+	stage.regex {
+		expression = "^(?P<timestamp>\\w{3} \\d{1,2}, \\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(?P<thread_id>\\d+)\\] (?P<level>\\w+) - (?:\\[(?P<component>[^\\]]+)\\] )?(?P<message>.*)$"
+	}
+
+	stage.timestamp {
+		source   = "timestamp"
+		format   = "Jan 2, 2006 15:04:05.000"
+		location = "Etc/UTC"
+	}
+
+	stage.labels {
+		values = {
+			level = "",
+		}
+	}
+
+	stage.structured_metadata {
+		values = {
+			thread_id = "",
+			component = "",
+			message   = "",
+		}
+	}
+}
+
+// ###############################
+// #### SYSLOG ####
+// ###############################
+discovery.relabel "syslog" {
+	// https://grafana.com/docs/alloy/latest/reference/components/discovery/discovery.relabel/
+
+	targets = []
+
+	rule {
+		source_labels = ["__syslog_message_hostname"]
+		target_label  = "host"
+	}
+
+	rule {
+		source_labels = ["__syslog_message_hostname"]
+		target_label  = "hostname"
+	}
+
+	rule {
+		source_labels = ["__syslog_message_severity"]
+		target_label  = "level"
+	}
+
+	rule {
+		source_labels = ["__syslog_message_app_name"]
+		target_label  = "application"
+	}
+
+	rule {
+		source_labels = ["__syslog_message_facility"]
+		target_label  = "facility"
+	}
+
+	rule {
+		source_labels = ["__syslog_connection_hostname"]
+		target_label  = "connection_hostname"
+	}
+}
+
+loki.source.syslog "syslog" {
+	// https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.syslog/
+
+	listener {
+		address             = "0.0.0.0:5514"
+		protocol            = "udp"
+		idle_timeout        = "0s"
+		use_rfc5424_message = true
+		labels              = {job = "syslog", component = "loki.source.syslog", protocol = "udp"}
+		max_message_length  = 0
+	}
+
+	listener {
+		address             = "0.0.0.0:5515"
+		protocol            = "tcp"
+		idle_timeout        = "0s"
+		use_rfc5424_message = true
+		labels              = {job = "syslog", component = "loki.source.syslog", protocol = "tcp"}
+		max_message_length  = 0
+	}
+
+	forward_to    = [loki.process.syslog.receiver]
+	relabel_rules = discovery.relabel.syslog.rules
+}
+
+loki.process "syslog" {
+	// https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/
+
+	forward_to = [loki.write.default.receiver]
+}
+
+loki.source.journal "journal" {
+	forward_to = [loki.relabel.journal.receiver]
+	labels     = {job = "journal"}
+	path       = "/var/log/journal"
+}
+
+loki.relabel "journal" {
+	forward_to = [loki.write.default.receiver]
+	// Convert the journald unit field into a label named "unit"
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		target_label  = "unit"
+	}
+}
+
+loki.write "default" {
+	// https://grafana.com/docs/alloy/latest/reference/components/loki/loki.write/
+
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

@@ -1,0 +1,283 @@
+services:
+  prometheus:
+    image: quay.io/prometheus/prometheus:v3.7.3
+    container_name: prometheus
+    restart: unless-stopped
+    user: 99:1000
+    volumes:
+      - ./Prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./Prometheus/recording-rules.yml:/etc/prometheus/recording-rules.yml
+      - ./Prometheus/alerting-rules.yml:/etc/prometheus/alerting-rules.yml
+      - ${MONITORING:?err}/Prometheus/data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=1y"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+      - "--web.enable-remote-write-receiver"
+      - "--web.external-url=https://prometheus.domain.tld"
+    ports:
+      - 9999:9090
+    networks:
+      - MONITORING
+      - NPM
+
+  alertmanager:
+    image: prom/alertmanager:v0.29.0
+    container_name: alertmanager
+    restart: unless-stopped
+    ports:
+      - 9093:9093
+    user: 1000:1000
+    volumes:
+      - ./AlertManager/config/alertmanager.yaml:/etc/alertmanager/config.yml
+      - ${MONITORING:?err}/AlertManager/data/:/alertmanager/data
+    command:
+      - "--config.file=/etc/alertmanager/config.yml"
+      - "--log.level=debug"
+      - "--web.external-url=https://alertmanager.domain.tld"
+      - "--storage.path=/alertmanager/data"
+    networks:
+      - MONITORING
+      - NPM
+
+  loki:
+    container_name: loki
+    image: grafana/loki:3.6.0
+    restart: unless-stopped
+    user: 10001:1000
+    ports:
+      - 3100:3100
+    volumes:
+      - ./Loki/loki.yaml:/etc/loki/loki.yaml
+      - ${MONITORING:?err}/Loki/data:/data
+    command:
+      - "-config.file=/etc/loki/loki.yaml"
+    networks:
+      - MONITORING
+      - NPM
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:12.3.0
+    restart: unless-stopped
+    user: 472:1000
+    environment:
+      GF_SECURITY_ALLOW_EMBEDDING: true
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_USERS_DEFAULT_THEME: dark
+      GF_LOG_MODE: console
+      GF_LOG_LEVEL: critical
+      GF_LOG_FILTERS: rendering:debug
+      GF_PANELS_ENABLE_ALPHA: true
+      GF_FEATURE_TOGGLES_ENABLE: accessControlOnCall lokiLogsDataplane
+      GF_PLUGINS_PREINSTALL: grafana-clock-panel,grafana-polystat-panel
+      GF_SERVER_ROOT_URL: https://grafana.domain.tld
+    volumes:
+      - ./Grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./Grafana/plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml:ro
+      - ./Grafana/provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/provisioning-dashboards.yaml:ro
+      - ./Grafana/provisioning/datasources.yml:/etc/grafana/provisioning/datasources/provisioning-datasources.yaml:ro
+      - ${MONITORING:?err}/Grafana/data:/var/lib/grafana
+      - /etc/group:/etc/group:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/shadow:/etc/shadow:ro
+    ports:
+      - 3000:3000
+    networks:
+      - MONITORING
+      - NPM
+
+  alloy:
+    image: grafana/alloy:v1.11.3
+    container_name: alloy
+    ports:
+      - 12345:12345 # Alloy UI
+      - 5514:5514/udp # syslog udp
+      - 5515:5515/tcp # syslog tcp
+    volumes:
+      - ./Alloy/config.alloy:/etc/alloy/config.alloy
+      - ${MONITORING:?err}/Alloy/data:/var/lib/alloy/data
+      - /etc/machine-id:/etc/machine-id:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    privileged: true
+    depends_on:
+      - loki
+      - prometheus
+    networks:
+      - MONITORING
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.10.2
+    container_name: node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    networks:
+      - MONITORING
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      # https://github.com/google/cadvisor/issues/1565#issuecomment-718812180
+      - /var/run/docker.sock:/var/run/docker.sock
+      # - /dev/disk:/dev/disk:ro
+    ports:
+      - 9876:8080
+    networks:
+      - MONITORING
+      - NPM
+
+  smartctl-exporter:
+    container_name: smartctl-exporter
+    image: prometheuscommunity/smartctl-exporter:v0.14.0
+    privileged: true
+    user: root
+    ports:
+      - 9633:9633
+    networks:
+      - MONITORING
+
+  sonarr-exportarr:
+    image: ghcr.io/onedr0p/exportarr:v2.3.0
+    container_name: sonarr-exportarr
+    command: ["sonarr"]
+    environment:
+      PORT: 9707
+      URL: http://sonarr:8989
+      APIKEY: <API_KEY>
+      ENABLE_ADDITIONAL_METRICS: true
+      ENABLE_UNKNOWN_QUEUE_ITEMS: true
+    labels:
+      logging: false
+    networks:
+      - MONITORING
+    ports:
+      - 9707:9707
+    restart: unless-stopped
+
+  radarr-exportarr:
+    image: ghcr.io/onedr0p/exportarr:v2.3.0
+    container_name: radarr-exportarr
+    command: ["radarr"]
+    environment:
+      PORT: 9708
+      URL: http://radarr:7878
+      APIKEY: 8437bf47304d4d9f931112856a8acf26
+      ENABLE_ADDITIONAL_METRICS: true
+      ENABLE_UNKNOWN_QUEUE_ITEMS: true
+    labels:
+      logging: false
+    networks:
+      - MONITORING
+    ports:
+      - 9708:9708
+    restart: unless-stopped
+
+  prowlarr-exportarr:
+    image: ghcr.io/onedr0p/exportarr:v2.3.0
+    container_name: prowlarr-exportarr
+    command: ["prowlarr"]
+    environment:
+      PORT: 9710
+      URL: http://prowlarr:9696
+      APIKEY: <API_KEY>
+      ENABLE_ADDITIONAL_METRICS: true
+      ENABLE_UNKNOWN_QUEUE_ITEMS: true
+    labels:
+      logging: false
+    networks:
+      - MONITORING
+    ports:
+      - 9710:9710
+    restart: unless-stopped
+
+  sabnzbd-exportarr:
+    image: ghcr.io/onedr0p/exportarr:v2.3.0
+    container_name: sabnzbd-exportarr
+    command: ["sabnzbd"]
+    environment:
+      PORT: 9711
+      URL: "http://sabnzbd:8080"
+      APIKEY: 21e505d365134eba8a6bad4557523124
+      ENABLE_ADDITIONAL_METRICS: true
+      ENABLE_UNKNOWN_QUEUE_ITEMS: true
+    labels:
+      logging: false
+    networks:
+      - MONITORING
+    ports:
+      - 9711:9711
+    restart: unless-stopped
+
+  tdarr-exporter:
+    image: docker.io/homeylab/tdarr-exporter:1.4.3
+    container_name: tdarr-exporter
+    environment:
+      TDARR_URL: http://tdarr:8265
+      VERIFY_SSL: "true"
+      LOG_LEVEL: info
+      PROMETHEUS_PORT: "9712"
+      PROMETHEUS_PATH: /metrics
+    labels:
+      logging: false
+    networks:
+      - MONITORING
+    ports:
+      - 9712:9712
+    restart: unless-stopped
+
+  unpoller:
+    image: ghcr.io/unpoller/unpoller:v2.15.4
+    ports:
+      - "9130:9130"
+    container_name: unpoller
+    environment:
+      UP_INFLUXDB_DISABLE: true
+      UP_POLLER_DEBUG: false
+      UP_UNIFI_DYNAMIC: false
+      UP_PROMETHEUS_HTTP_LISTEN: 0.0.0.0:9130
+      UP_PROMETHEUS_NAMESPACE: unpoller
+      UP_UNIFI_CONTROLLER_0_PASS: unpoller1234
+      UP_UNIFI_CONTROLLER_0_SAVE_ALARMS: false
+      UP_UNIFI_CONTROLLER_0_SAVE_ANOMALIES: false
+      UP_UNIFI_CONTROLLER_0_SAVE_DPI: false
+      UP_UNIFI_CONTROLLER_0_SAVE_EVENTS: false
+      UP_UNIFI_CONTROLLER_0_SAVE_IDS: false
+      UP_UNIFI_CONTROLLER_0_SAVE_SITES: true
+      UP_UNIFI_CONTROLLER_0_URL: https://cloudkey-gen2.domain.tld:443
+      UP_UNIFI_CONTROLLER_0_USER: unpoller
+    networks:
+      - MONITORING
+    restart: unless-stopped
+
+networks:
+  NPM:
+    external: true
+  MONITORING:
+    external: true
