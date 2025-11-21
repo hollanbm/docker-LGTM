@@ -2,7 +2,13 @@
 
 Originally forked from [docker-monitoring-stack-gpnc](https://github.com/ruanbekker/docker-monitoring-stack-gpnc)
 
-Features:
+## Before getting started
+
+`docker create network MONITORING`
+
+`NPM` is the name of my reverse proxy network. Update to match yours
+
+## Features
 
 * [Grafana](https://github.com/grafana/grafana)
 * [Prometheus](https://github.com/prometheus/prometheus)
@@ -19,4 +25,3 @@ Features:
 * [unpoller](https://github.com/unpoller/unpoller)
 * [smartctl-exporter](https://github.com/prometheus-community/smartctl_exporter)
 
-## Grafana Dashboards
