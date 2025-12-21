@@ -2,6 +2,7 @@
 
 Originally forked from [docker-monitoring-stack-gpnc](https://github.com/ruanbekker/docker-monitoring-stack-gpnc)
 
+_Kept up-to date with [Renovatebot](https://github.com/renovatebot/renovate)_
 ## Before getting started
 
 `docker create network MONITORING`
