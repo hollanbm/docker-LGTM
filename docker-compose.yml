@@ -61,7 +61,7 @@ services:
 
   grafana:
     container_name: grafana
-    image: grafana/grafana:12.3.0
+    image: grafana/grafana:12.3.1
     restart: unless-stopped
     user: 472:1000
     environment:
