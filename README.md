@@ -24,4 +24,3 @@ Originally forked from [docker-monitoring-stack-gpnc](https://github.com/ruanbek
 * [tdarr exporter](https://github.com/homeylab/tdarr-exporter)
 * [unpoller](https://github.com/unpoller/unpoller)
 * [smartctl-exporter](https://github.com/prometheus-community/smartctl_exporter)
-
