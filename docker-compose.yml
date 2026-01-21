@@ -101,9 +101,13 @@ services:
     volumes:
       - ./Alloy/config.alloy:/etc/alloy/config.alloy
       - ${MONITORING:?err}/Alloy/data:/var/lib/alloy/data
+      - /:/rootfs:ro
       - /etc/machine-id:/etc/machine-id:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/log:/var/log:ro
+      - /var/run:/var/run:rw
       - /var/run/docker.sock:/var/run/docker.sock
     privileged: true
     depends_on:
@@ -133,25 +137,6 @@ services:
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     networks:
       - MONITORING
-
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.52.1
-    container_name: cadvisor
-    restart: unless-stopped
-    privileged: true
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-      # https://github.com/google/cadvisor/issues/1565#issuecomment-718812180
-      - /var/run/docker.sock:/var/run/docker.sock
-      # - /dev/disk:/dev/disk:ro
-    ports:
-      - 9876:8080
-    networks:
-      - MONITORING
-      - NPM
 
   smartctl-exporter:
     container_name: smartctl-exporter

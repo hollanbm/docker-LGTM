@@ -23,10 +23,6 @@ prometheus.scrape "metrics" {
 			job         = "node-exporter",
 		},
 		{
-			__address__ = "cadvisor:8080",
-			job         = "cadvisor",
-		},
-		{
 			__address__ = "smartctl-exporter:9633",
 			job         = "smartctl",
 		},
@@ -72,6 +68,28 @@ prometheus.relabel "metrics" {
 	// 	replacement   = "$1"
 	// 	action        = "replace"
 	// }
+
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.exporter.cadvisor "local" {
+	docker_host = "unix:///var/run/docker.sock"
+}
+
+prometheus.scrape "cadvisor" {
+	targets = prometheus.exporter.cadvisor.local.targets
+
+	scrape_timeout = "60s"
+
+	forward_to = [prometheus.relabel.cadvisor.receiver]
+}
+
+prometheus.relabel "cadvisor" {
+	rule {
+		target_label = "job"
+		replacement  = "cadvisor"
+		action       = "replace"
+	}
 
 	forward_to = [prometheus.remote_write.default.receiver]
 }
