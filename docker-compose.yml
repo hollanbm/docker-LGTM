@@ -45,7 +45,7 @@ services:
 
   loki:
     container_name: loki
-    image: grafana/loki:3.6.3
+    image: grafana/loki:3.6.4
     restart: unless-stopped
     user: 10001:1000
     ports:
