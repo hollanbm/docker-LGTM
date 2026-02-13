@@ -21,8 +21,8 @@ _Kept up-to date with [Renovatebot](https://github.com/renovatebot/renovate)_
 
 ## Prometheus Exporters
 
-* [node-exporter](https://github.com/prometheus/node_exporter)
-* [cadvisor](https://github.com/google/cadvisor)
+* [node-exporter](https://github.com/prometheus/node_exporter) via Alloy built-in [prometheus.exporter.unix](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.exporter.unix/)
+* [cadvisor](https://github.com/google/cadvisor) via Alloy built-in [prometheus.exporter.cadvisor](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.exporter.cadvisor/)
 * [exportarr](https://github.com/onedr0p/exportarr)
 * [tdarr exporter](https://github.com/homeylab/tdarr-exporter)
 * [unpoller](https://github.com/unpoller/unpoller)
