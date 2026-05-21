@@ -224,7 +224,7 @@ services:
     restart: unless-stopped
 
   unpoller:
-    image: ghcr.io/unpoller/unpoller:v2.19.0@sha256:6b481094a15d6da4d4b701ba5cb2f8358f307a0c438c8e84b4b132b36879ff77
+    image: ghcr.io/unpoller/unpoller:v3.2.0@sha256:bf7bdcc59fcdaa4699687007aa3ec24ddb3c9d9521f392d8c7aa2bea1bdb781a
     ports:
       - "9130:9130"
     container_name: unpoller
