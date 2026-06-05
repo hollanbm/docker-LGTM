@@ -61,7 +61,7 @@ services:
 
   grafana:
     container_name: grafana
-    image: grafana/grafana:12.4.3@sha256:2e986801428cd689c2358605289c90ab37d2b39e24808874971f54c99bcdc412
+    image: grafana/grafana:12.4.4@sha256:378f94b054e5384cd74322cbf7542cff6a43e068e4011f81ea5e75323247df02
     restart: unless-stopped
     user: 472:1000
     environment:
