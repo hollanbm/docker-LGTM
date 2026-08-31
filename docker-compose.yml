@@ -92,7 +92,7 @@ services:
       - NPM
 
   alloy:
-    image: grafana/alloy:v1.19.0@sha256:c958aef7294bc40c67caadb2bcecc93b95ab7961ff8afae3abee170d77426193
+    image: grafana/alloy:v1.19.2@sha256:b8ec653c44235fbe910879145dac3597d66b0aaecf60bcbbe82580767771a839
     container_name: alloy
     ports:
       - 12345:12345 # Alloy UI
